@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: devan-sp
+  name: devan-sp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: devan-sp
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: devan-sp
+    spec:
+      containers:
+      - image: devanarayanantm/java-devan
+        name: java-devan
+        resources: {}
+status: {}
