@@ -8,7 +8,7 @@ pipeline {
                 {
                     sh '''
 		    mvn clean install
-                    docker login -u $USERNAME --password-stdin
+                    docker login -u "$USERNAME" -p "$PW"
                     docker build -t devanarayanantm/spring-devan-img .
                     docker push devanarayanantm/spring-devan-img
                     '''
