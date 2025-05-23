@@ -8,7 +8,6 @@ pipeline {
                 {
                     sh '''
 		    mvn clean install
-                    echo 'sharedlib success'
                     docker login -u $USERNAME -p $PW
                     docker build -t devanarayanantm/spring-devan-img .
                     docker push devanarayanantm/spring-devan-img
