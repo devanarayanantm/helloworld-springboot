@@ -3,7 +3,7 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/docker
 
 trigger:
-- feature
+- none
 
 resources:
 - repo: self
@@ -17,6 +17,10 @@ variables:
   dockerfilePath: '**/Dockerfile'
   tag: '$(Build.BuildId)'
   imagePullSecret: 'devancr1656ab23-auth'
+  resourceGroup: 'dev-11'
+  location: 'centralindia'
+  templateFile: './aks-cluster.bicep'
+  azureserviceconnection: 'dev-az-stubs'
 
   # Agent VM image name
   vmImageName: 'dev-vm'
@@ -34,15 +38,6 @@ stages:
       name: devagent
       vmImage: $(vmImageName)
     steps:
-    # - task: Maven@4
-    #   inputs:
-    #     mavenPomFile: 'pom.xml'
-    #     publishJUnitResults: false
-    #     javaHomeOption: 'JDKVersion'
-    #     mavenVersionOption: 'Default'
-    #     mavenAuthenticateFeed: false
-    #     effectivePomSkip: false
-    #     sonarQubeRunAnalysis: false
     - task: Maven@4
       inputs:
         mavenPomFile: 'pom.xml'
@@ -65,14 +60,14 @@ stages:
         containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
           $(tag)
-    - task: Bash@3
-      inputs:
-        targetType: 'inline'
-        script: 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh'
-    - task: Bash@3
-      inputs:
-        targetType: 'inline'
-        script: './bin/trivy image --severity HIGH,CRITICAL,MEDIUM --ignore-unfixed $(containerRegistry)/$(imageRepository):$(tag)'
+    # - task: Bash@3
+    #   inputs:
+    #     targetType: 'inline'
+    #     script: 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh'
+    # - task: Bash@3
+    #   inputs:
+    #     targetType: 'inline'
+    #     script: './bin/trivy image --severity HIGH,CRITICAL,MEDIUM --ignore-unfixed $(containerRegistry)/$(imageRepository):$(tag)'
 
     - upload: manifests
       artifact: manifests
@@ -88,11 +83,28 @@ stages:
     pool:
       name: devagent
       vmImage: $(vmImageName)
-    environment: 'aks.default'
+    environment: 'aks-1731.default'
     strategy:
       runOnce:
         deploy:
           steps:
+          - task: AzureCLI@2
+            displayName: 'aks cluster creating'
+            inputs:
+              azureSubscription: $(azureserviceconnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Deploying AKS cluster using Bicep..."
+                az deployment group create \
+                  --resource-group $(resourceGroup) \
+                  --template-file $(templateFile) \
+                  --parameters \
+                    clusterName='dev-aks' \
+                    dnsPrefix='devg' \
+                    # vmSize='standard_B2s'
+                sleep 20
+                    
           - task: KubernetesManifest@0
             displayName: Create imagePullSecret
             inputs:
@@ -173,3 +185,190 @@ stages:
                 message="${message} and is available at $url.<br><br>[Learn More](https://aka.ms/testwithreviewapps) about how to test and provide feedback for the app."
               fi
               echo "##vso[task.setvariable variable=GITHUB_COMMENT]$message"
+
+
+
+
+
+
+
+
+
+# OLDPIPELINE
+
+
+# # Deploy to Azure Kubernetes Service
+# # Build and push image to Azure Container Registry; Deploy to Azure Kubernetes Service
+# # https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+# trigger:
+# - feature
+
+# resources:
+# - repo: self
+
+# variables:
+
+#   # Container registry service connection established during pipeline creation
+#   dockerRegistryServiceConnection: '947a1c6a-143e-430e-9ecb-46e3a94e9f7e'
+#   imageRepository: 'aks'
+#   containerRegistry: 'devancr.azurecr.io'
+#   dockerfilePath: '**/Dockerfile'
+#   tag: '$(Build.BuildId)'
+#   imagePullSecret: 'devancr1656ab23-auth'
+
+#   # Agent VM image name
+#   vmImageName: 'dev-vm'
+
+#   # Name of the new namespace being created to deploy the PR changes.
+#   k8sNamespaceForPR: 'review-app-$(System.PullRequest.PullRequestId)'
+
+# stages:
+# - stage: Build
+#   displayName: Build stage
+#   jobs:
+#   - job: Build
+#     displayName: Build
+#     pool:
+#       name: devagent
+#       vmImage: $(vmImageName)
+#     steps:
+#     # - task: Maven@4
+#     #   inputs:
+#     #     mavenPomFile: 'pom.xml'
+#     #     publishJUnitResults: false
+#     #     javaHomeOption: 'JDKVersion'
+#     #     mavenVersionOption: 'Default'
+#     #     mavenAuthenticateFeed: false
+#     #     effectivePomSkip: false
+#     #     sonarQubeRunAnalysis: false
+#     - task: Maven@4
+#       inputs:
+#         mavenPomFile: 'pom.xml'
+#         publishJUnitResults: true
+#         testResultsFiles: '**/surefire-reports/TEST-*.xml'
+#         codeCoverageToolOption: 'JaCoCo'
+#         codeCoverageSourceDirectories: 'src/main/java/com/example'
+#         javaHomeOption: 'JDKVersion'
+#         mavenVersionOption: 'Default'
+#         mavenAuthenticateFeed: false
+#         effectivePomSkip: false
+#         sonarQubeRunAnalysis: false
+
+#     - task: Docker@2
+#       displayName: Build and push an image to container registry
+#       inputs:
+#         command: buildAndPush
+#         repository: $(imageRepository)
+#         dockerfile: $(dockerfilePath)
+#         containerRegistry: $(dockerRegistryServiceConnection)
+#         tags: |
+#           $(tag)
+#     - task: Bash@3
+#       inputs:
+#         targetType: 'inline'
+#         script: 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh'
+#     - task: Bash@3
+#       inputs:
+#         targetType: 'inline'
+#         script: './bin/trivy image --severity HIGH,CRITICAL,MEDIUM --ignore-unfixed $(containerRegistry)/$(imageRepository):$(tag)'
+
+#     - upload: manifests
+#       artifact: manifests
+
+# - stage: Deploy
+#   displayName: Deploy stage
+#   dependsOn: Build
+
+#   jobs:
+#   - deployment: Deploy
+#     condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/pull/')))
+#     displayName: Deploy
+#     pool:
+#       name: devagent
+#       vmImage: $(vmImageName)
+#     environment: 'aks.default'
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - task: KubernetesManifest@0
+#             displayName: Create imagePullSecret
+#             inputs:
+#               action: createSecret
+#               secretName: $(imagePullSecret)
+#               dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+
+#           - task: KubernetesManifest@0
+#             displayName: Deploy to Kubernetes cluster
+#             inputs:
+#               action: deploy
+#               manifests: |
+#                 $(Pipeline.Workspace)/manifests/deployment.yml
+#                 $(Pipeline.Workspace)/manifests/service.yml
+#               imagePullSecrets: |
+#                 $(imagePullSecret)
+#               containers: |
+#                 $(containerRegistry)/$(imageRepository):$(tag)
+
+#   - deployment: DeployPullRequest
+#     displayName: Deploy Pull request
+#     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/pull/'))
+#     pool:
+#       name: devagent
+#       vmImage: $(vmImageName)
+
+#     environment: 'aks.$(k8sNamespaceForPR)'
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - reviewApp: default
+
+#           - task: Kubernetes@1
+#             displayName: 'Create a new namespace for the pull request'
+#             inputs:
+#               command: apply
+#               useConfigurationFile: true
+#               inline: '{ "kind": "Namespace", "apiVersion": "v1", "metadata": { "name": "$(k8sNamespaceForPR)" }}'
+
+#           - task: KubernetesManifest@0
+#             displayName: Create imagePullSecret
+#             inputs:
+#               action: createSecret
+#               secretName: $(imagePullSecret)
+#               namespace: $(k8sNamespaceForPR)
+#               dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
+
+#           - task: KubernetesManifest@0
+#             displayName: Deploy to the new namespace in the Kubernetes cluster
+#             inputs:
+#               action: deploy
+#               namespace: $(k8sNamespaceForPR)
+#               manifests: |
+#                 $(Pipeline.Workspace)/manifests/deployment.yml
+#                 $(Pipeline.Workspace)/manifests/service.yml
+#               imagePullSecrets: |
+#                 $(imagePullSecret)
+#               containers: |
+#                 $(containerRegistry)/$(imageRepository):$(tag)
+
+#           - task: Kubernetes@1
+#             name: get
+#             displayName: 'Get services in the new namespace'
+#             continueOnError: true
+#             inputs:
+#               command: get
+#               namespace: $(k8sNamespaceForPR)
+#               arguments: svc
+#               outputFormat: jsonpath='http://{.items[0].status.loadBalancer.ingress[0].ip}:{.items[0].spec.ports[0].port}'
+
+#           # Getting the IP of the deployed service and writing it to a variable for posing comment
+#           - script: |
+#               url="$(get.KubectlOutput)"
+#               message="Your review app has been deployed"
+#               if [ ! -z "$url" -a "$url" != "http://:" ]
+#               then
+#                 message="${message} and is available at $url.<br><br>[Learn More](https://aka.ms/testwithreviewapps) about how to test and provide feedback for the app."
+#               fi
+#               echo "##vso[task.setvariable variable=GITHUB_COMMENT]$message"
